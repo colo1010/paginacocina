@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Burger Kitchen | Pantalla de Cocina (KDS)</title>
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SDKs de Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen p-4 sm:p-6">
 
@@ -16,7 +18,7 @@
         <span>👨‍🍳</span> BURGER KITCHEN — COCINA
       </h1>
       <p class="text-gray-400 text-xs sm:text-sm mt-1">
-        Gestión de comandas y control de estado de pedidos en tiempo real.
+        Gestión de comandas en tiempo real vía Firebase.
       </p>
     </div>
 
@@ -35,38 +37,57 @@
   </header>
 
   <main class="mt-6">
-    <!-- MENSAJE SI NO HAY PEDIDOS -->
     <div id="sin-pedidos" class="text-center py-20 hidden">
       <div class="text-6xl mb-4">🍔</div>
       <h2 class="text-xl font-bold text-gray-400">No hay comandas activas en este momento</h2>
-      <p class="text-gray-600 text-sm mt-1">Los nuevos pedidos realizados por los clientes aparecerán aquí automáticamente.</p>
+      <p class="text-gray-600 text-sm mt-1">Los nuevos pedidos realizados aparecerán aquí automáticamente.</p>
     </div>
 
-    <!-- CONTENEDOR DE TARJETAS DE PEDIDOS -->
     <div id="grid-comandas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
   </main>
 
   <script>
-    // Estructura de almacenamiento local para simular la BD de pedidos
-    let pedidos = JSON.parse(localStorage.getItem('bk_pedidos_cocina')) || [];
+    // Configuración de Firebase (debe ser la misma que en la tienda)
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "tu-proyecto.firebaseapp.com",
+      databaseURL: "https://tu-proyecto-default-rtdb.firebaseio.com",
+      projectId: "tu-proyecto",
+      storageBucket: "tu-proyecto.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let pedidos = [];
     let filtroActual = 'todos';
 
-    // Función para obtener y renderizar los pedidos
+    // ESCUCHAR CAMBIOS EN TIEMPO REAL DESDE FIREBASE
+    db.ref('pedidos').on('value', (snapshot) => {
+      const data = snapshot.val();
+      pedidos = [];
+      if (data) {
+        Object.keys(data).forEach(key => {
+          pedidos.push(data[key]);
+        });
+        // Ordenar del más reciente al más antiguo
+        pedidos.sort((a, b) => b.timestamp - a.timestamp);
+      }
+      cargarPedidosCocina();
+    });
+
     function cargarPedidosCocina() {
-      // Re-leer del localStorage para capturar nuevos pedidos agregados desde la tienda
-      pedidos = JSON.parse(localStorage.getItem('bk_pedidos_cocina')) || [];
-      
       const grid = document.getElementById('grid-comandas');
       const msjVacio = document.getElementById('sin-pedidos');
 
-      // Filtrar según la pestaña activa (excluyendo los finalizados por defecto)
       let pedidosFiltrados = pedidos.filter(p => p.estado !== 'entregado');
       
       if (filtroActual !== 'todos') {
         pedidosFiltrados = pedidosFiltrados.filter(p => p.estado === filtroActual);
       }
 
-      // Actualizar contadores
       document.getElementById('cant-todos').innerText = pedidos.filter(p => p.estado !== 'entregado').length;
       document.getElementById('cant-pendiente').innerText = pedidos.filter(p => p.estado === 'pendiente').length;
       document.getElementById('cant-preparacion').innerText = pedidos.filter(p => p.estado === 'preparacion').length;
@@ -81,7 +102,6 @@
       grid.innerHTML = pedidosFiltrados.map(p => crearTarjetaComanda(p)).join('');
     }
 
-    // Generador de la tarjeta individual de cada comanda
     function crearTarjetaComanda(p) {
       const esPendiente = p.estado === 'pendiente';
       const esPreparacion = p.estado === 'preparacion';
@@ -97,9 +117,7 @@
 
       return `
         <div class="bg-gray-800 rounded-2xl border ${borderStyle} p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
-          
           <div>
-            <!-- Header de la tarjeta -->
             <div class="flex justify-between items-start border-b border-gray-700 pb-3 mb-3">
               <div>
                 <span class="text-2xl font-black text-white tracking-wider">${p.id}</span>
@@ -111,14 +129,12 @@
               <div>${badgeEstado}</div>
             </div>
 
-            <!-- Datos del Cliente -->
             <div class="text-xs text-gray-300 mb-4 bg-gray-900/60 p-2.5 rounded-lg border border-gray-700/50 space-y-1">
               <p><strong>Cliente:</strong> ${p.cliente}</p>
               <p><strong>Teléfono:</strong> ${p.telefono}</p>
               ${p.direccion ? `<p><strong>Dirección:</strong> <span class="text-amber-200">${p.direccion}</span></p>` : ''}
             </div>
 
-            <!-- Ítems del Pedido -->
             <div class="space-y-2 mb-6">
               <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Comanda:</p>
               <ul class="divide-y divide-gray-700/50 text-sm">
@@ -132,7 +148,6 @@
             </div>
           </div>
 
-          <!-- Acciones según el estado -->
           <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
             ${esPendiente ? `
               <button onclick="cambiarEstadoPedido('${p.id}', 'preparacion')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
@@ -146,25 +161,19 @@
               </button>
             ` : ''}
           </div>
-
         </div>
       `;
     }
 
-    // Cambiar estado del pedido
+    // Actualiza el estado en Firebase
     function cambiarEstadoPedido(idPedido, nuevoEstado) {
-      let index = pedidos.findIndex(p => p.id === idPedido);
-      if (index !== -1) {
-        pedidos[index].estado = nuevoEstado;
-        localStorage.setItem('bk_pedidos_cocina', JSON.stringify(pedidos));
-        cargarPedidosCocina();
-      }
+      db.ref('pedidos/' + idPedido.replace('#', '')).update({
+        estado: nuevoEstado
+      });
     }
 
-    // Cambiar filtro activo
     function filtrarPedidos(filtro) {
       filtroActual = filtro;
-      
       const btnTodos = document.getElementById('btn-filtro-todos');
       const btnPend = document.getElementById('btn-filtro-pendiente');
       const btnPrep = document.getElementById('btn-filtro-preparacion');
@@ -178,12 +187,6 @@
 
       cargarPedidosCocina();
     }
-
-    // Sincronización automática periódica (cada 4 segundos busca pedidos nuevos)
-    setInterval(cargarPedidosCocina, 4000);
-
-    // Carga inicial
-    cargarPedidosCocina();
   </script>
 </body>
 </html>
