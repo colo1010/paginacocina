@@ -151,11 +151,17 @@
             </div>
           </div>
 
-          <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
-            <!-- BOTÓN PARA ENVIAR DATOS DE PAGO -->
-            <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-600">
-              <span>💳 Enviar Datos de Transferencia</span>
-            </button>
+       <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
+            <!-- BOTÓN CON CAMBIO DE ESTADO SEGÚN SI YA SE ENVIÓ O NO -->
+            ${p.datosPagoEnviados ? `
+              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-blue-500/30">
+                <span>✓ Datos de Pago Enviados (Reenviar)</span>
+              </button>
+            ` : `
+              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-600">
+                <span>💳 Enviar Datos de Transferencia</span>
+              </button>
+            `}
 
             ${esPendiente ? `
               <button onclick="confirmarEInformaCliente('${p.id}', '${p.telefono}', '${p.cliente}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
@@ -179,17 +185,37 @@
         estado: nuevoEstado
       });
     }
-        // Función para enviar los datos bancarios directamente al cliente desde la cocina
-function enviarDatosPagoWA(telefonoCliente, idPedido, total) {
-  let numLimpio = telefonoCliente.replace(/\D/g, '');
-  if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
-    numLimpio = '56' + numLimpio;
-  }
+ function enviarDatosPagoWA(telefonoCliente, idPedido) {
+      // 1. Limpiar el formato del número telefónico
+      let numLimpio = telefonoCliente.replace(/\D/g, '');
+      if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
+        numLimpio = '56' + numLimpio;
+      }
 
-  const mensaje = `¡Hola! 👋 Para completar tu pedido ${idPedido}, puedes transferir el total de $${total} a la siguiente cuenta:\n\n📌 *DATOS DE TRANSFERENCIA:* \nBanco: [Tu Banco]\nTipo: CuentaRUT / Corriente\nN°: [Número]\nRUT: [RUT]\nNombre: [Nombre Titular]\nCorreo: [Correo]\n\nPor favor reenvíanos el comprobante por este chat. ¡Muchas gracias!`;
+      // 2. Redactar el mensaje con tus datos bancarios
+      const mensaje = `¡Hola! 👋 Para confirmar tu pedido ${idPedido}, te enviamos los datos para realizar la transferencia:\n\n` +
+                      `📌 *DATOS DE TRANSFERENCIA*\n` +
+                      `• Banco: BancoEstado / Falabella / Chile\n` +
+                      `• Tipo de Cuenta: CuentaRUT / Corriente\n` +
+                      `• Número de Cuenta: 12345678\n` +
+                      `• RUT: 12.345.678-9\n` +
+                      `• Titular: Burger Kitchen SpA\n` +
+                      `• Correo: pagos@burgerkitchen.cl\n\n` +
+                      `Por favor reenvíanos la foto o comprobante por este mismo chat. ¡Muchas gracias! 🍔`;
 
-  window.open(`https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`, '_blank');
-}
+      // 3. Marcar en Firebase que los datos de pago ya se enviaron
+      try {
+        db.ref('pedidos/' + idPedido.replace('#', '')).update({
+          datosPagoEnviados: true
+        });
+      } catch (e) {
+        console.error("Error al actualizar estado de pago en Firebase:", e);
+      }
+
+      // 4. Abrir la ventana de WhatsApp con el mensaje cargado
+      const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
+      window.open(urlWA, '_blank');
+    }
     
 function confirmarEInformaCliente(idPedido, telefonoCliente, nombreCliente) {
   // 1. Actualizar el estado en Firebase
