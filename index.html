@@ -47,17 +47,7 @@
   </main>
 
   <script>
-    // Función para enviar los datos bancarios directamente al cliente desde la cocina
-function enviarDatosPagoWA(telefonoCliente, idPedido, total) {
-  let numLimpio = telefonoCliente.replace(/\D/g, '');
-  if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
-    numLimpio = '56' + numLimpio;
-  }
-
-  const mensaje = `¡Hola! 👋 Para completar tu pedido ${idPedido}, puedes transferir el total de $${total} a la siguiente cuenta:\n\n📌 *DATOS DE TRANSFERENCIA:* \nBanco: [Tu Banco]\nTipo: CuentaRUT / Corriente\nN°: [Número]\nRUT: [RUT]\nNombre: [Nombre Titular]\nCorreo: [Correo]\n\nPor favor reenvíanos el comprobante por este chat. ¡Muchas gracias!`;
-
-  window.open(`https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`, '_blank');
-}
+   
     // Configuración de Firebase (debe ser la misma que en la tienda)
     const firebaseConfig = {
   apiKey: "AIzaSyCI3CWPBGqBsq30CC3AouVu3p4uhkNOkrw",
@@ -113,6 +103,17 @@ function enviarDatosPagoWA(telefonoCliente, idPedido, total) {
       msjVacio.classList.add('hidden');
       grid.innerHTML = pedidosFiltrados.map(p => crearTarjetaComanda(p)).join('');
     }
+     // Función para enviar los datos bancarios directamente al cliente desde la cocina
+function enviarDatosPagoWA(telefonoCliente, idPedido, total) {
+  let numLimpio = telefonoCliente.replace(/\D/g, '');
+  if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
+    numLimpio = '56' + numLimpio;
+  }
+
+  const mensaje = `¡Hola! 👋 Para completar tu pedido ${idPedido}, puedes transferir el total de $${total} a la siguiente cuenta:\n\n📌 *DATOS DE TRANSFERENCIA:* \nBanco: [Tu Banco]\nTipo: CuentaRUT / Corriente\nN°: [Número]\nRUT: [RUT]\nNombre: [Nombre Titular]\nCorreo: [Correo]\n\nPor favor reenvíanos el comprobante por este chat. ¡Muchas gracias!`;
+
+  window.open(`https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`, '_blank');
+}
 
     function crearTarjetaComanda(p) {
       const esPendiente = p.estado === 'pendiente';
