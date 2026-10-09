@@ -1,3 +1,13 @@
+Aquí tienes el código completo y actualizado para tu pantalla de cocina (**`cocina.html`** / KDS) con los cambios de tamaño de texto aplicados:
+
+1. **Nombre del cliente reducido:** Ahora se muestra en una tipografía discreta (`text-xs text-gray-300 font-medium`).
+2. **Detalle del pedido aumentado:** Cada producto en la comanda ahora resalta en grande (`text-lg sm:text-xl font-black`), permitiendo que el equipo de cocina lea los ítems rápidamente a distancia sin forzar la vista.
+
+---
+
+### Código Completo Actualizado (`cocina.html`)
+
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -67,7 +77,7 @@
     let filtroActual = 'todos';
     let cantidadAnteriorPendientes = 0;
 
-    // Alarma Sonora utilizando Web Audio API (No requiere archivos externos)
+    // Alarma Sonora utilizando Web Audio API
     function reproducirAlarmaCocina() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -75,7 +85,7 @@
         const gain = audioCtx.createGain();
 
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Tono A5
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
 
         osc.connect(gain);
@@ -100,7 +110,7 @@
           });
         });
 
-        // Ordenar comanda: de la más antigua a la más reciente para atender en orden de llegada
+        // Ordenar comanda: de la más antigua a la más reciente
         pedidos.sort((a, b) => a.timestamp - b.timestamp);
       }
 
@@ -113,7 +123,7 @@
       cargarPedidosCocina();
     });
 
-    // Actualizar los cronómetros de tiempo transcurrido cada 30 segundos
+    // Actualizar cronómetros cada 30 segundos
     setInterval(() => {
       cargarPedidosCocina();
     }, 30000);
@@ -155,7 +165,6 @@
       const keyRegistro = p.firebaseKey || p.id.replace('#', '');
       const tiempo = calcularTiempoTranscurrido(p.timestamp);
 
-      // Estilo por tiempo de espera
       let timeBadgeStyle = "bg-gray-700/50 text-gray-300";
       if (tiempo.minutos >= 10 && tiempo.minutos < 20) {
         timeBadgeStyle = "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold";
@@ -175,6 +184,7 @@
       return `
         <div class="bg-gray-800 rounded-2xl border ${borderStyle} p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
           <div>
+            <!-- ENCABEZADO COMANDA -->
             <div class="flex justify-between items-start border-b border-gray-700 pb-3 mb-3">
               <div>
                 <span class="text-2xl font-black text-white tracking-wider">${p.id}</span>
@@ -187,25 +197,27 @@
               <div>${badgeEstado}</div>
             </div>
 
-            <div class="text-xs text-gray-300 mb-4 bg-gray-900/60 p-2.5 rounded-lg border border-gray-700/50 space-y-1">
-              <p><strong>Cliente:</strong> ${p.cliente}</p>
-              <p><strong>Teléfono:</strong> ${p.telefono}</p>
-              ${p.direccion ? `<p><strong>Dirección:</strong> <span class="text-amber-200">${p.direccion}</span></p>` : ''}
+            <!-- DATOS DE CONTACTO (NOMBRE MÁS PEQUEÑO) -->
+            <div class="text-[11px] leading-tight text-gray-400 mb-4 bg-gray-900/60 p-2 rounded-lg border border-gray-700/50 space-y-0.5">
+              <p><strong class="text-gray-300">Cliente:</strong> <span class="font-medium text-gray-200">${p.cliente}</span> (${p.telefono})</p>
+              ${p.direccion ? `<p><strong class="text-gray-300">Dirección:</strong> <span class="text-amber-200/90">${p.direccion}</span></p>` : ''}
             </div>
 
+            <!-- DETALLE DE PEDIDO (PRODUCTOS MÁS GRANDES Y DESTACADOS) -->
             <div class="space-y-2 mb-6">
-              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Comanda:</p>
-              <ul class="divide-y divide-gray-700/50 text-sm">
+              <p class="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest border-b border-emerald-900/40 pb-1">PEDIDO:</p>
+              <ul class="divide-y divide-gray-700/50">
                 ${(p.items || []).map(item => `
-                  <li class="py-1.5 flex justify-between items-center font-semibold">
-                    <span class="text-emerald-300 font-bold text-base">${item.cant}x</span>
-                    <span class="text-white flex-grow ml-2 font-bold">${item.nombre}</span>
+                  <li class="py-2 flex items-center justify-between">
+                    <span class="text-emerald-400 font-black text-xl sm:text-2xl pr-3">${item.cant}x</span>
+                    <span class="text-white font-black text-lg sm:text-xl flex-grow leading-snug">${item.nombre}</span>
                   </li>
                 `).join('')}
               </ul>
             </div>
           </div>
 
+          <!-- BOTONES DE ACCIÓN -->
           <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
             ${p.datosPagoEnviados ? `
               <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}', '${keyRegistro}')" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-blue-500/30">
@@ -301,3 +313,5 @@
   </script>
 </body>
 </html>
+
+```
