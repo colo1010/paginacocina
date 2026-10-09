@@ -47,18 +47,16 @@
   </main>
 
   <script>
-   
-    // Configuración de Firebase (debe ser la misma que en la tienda)
     const firebaseConfig = {
-  apiKey: "AIzaSyCI3CWPBGqBsq30CC3AouVu3p4uhkNOkrw",
-  authDomain: "comandas-114cc.firebaseapp.com",
-  databaseURL: "https://comandas-114cc-default-rtdb.firebaseio.com",
-  projectId: "comandas-114cc",
-  storageBucket: "comandas-114cc.firebasestorage.app",
-  messagingSenderId: "852269899168",
-  appId: "1:852269899168:web:e05fef229b9a8db29158c5",
-  measurementId: "G-JGJWWQLVZ1"
-};
+      apiKey: "AIzaSyCI3CWPBGqBsq30CC3AouVu3p4uhkNOkrw",
+      authDomain: "comandas-114cc.firebaseapp.com",
+      databaseURL: "https://comandas-114cc-default-rtdb.firebaseio.com",
+      projectId: "comandas-114cc",
+      storageBucket: "comandas-114cc.firebasestorage.app",
+      messagingSenderId: "852269899168",
+      appId: "1:852269899168:web:e05fef229b9a8db29158c5",
+      measurementId: "G-JGJWWQLVZ1"
+    };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
@@ -72,7 +70,10 @@
       pedidos = [];
       if (data) {
         Object.keys(data).forEach(key => {
-          pedidos.push(data[key]);
+          pedidos.push({
+            ...data[key],
+            firebaseKey: key // Guardamos la clave única para evitar duplicados
+          });
         });
         // Ordenar del más reciente al más antiguo
         pedidos.sort((a, b) => b.timestamp - a.timestamp);
@@ -104,10 +105,10 @@
       grid.innerHTML = pedidosFiltrados.map(p => crearTarjetaComanda(p)).join('');
     }
 
-    
     function crearTarjetaComanda(p) {
       const esPendiente = p.estado === 'pendiente';
       const esPreparacion = p.estado === 'preparacion';
+      const keyRegistro = p.firebaseKey || p.id.replace('#', '');
 
       let borderStyle = esPendiente ? 'border-amber-500/50 bg-amber-950/10' : 'border-emerald-500/50 bg-emerald-950/10';
       let badgeEstado = esPendiente 
@@ -151,26 +152,25 @@
             </div>
           </div>
 
-       <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
-            <!-- BOTÓN CON CAMBIO DE ESTADO SEGÚN SI YA SE ENVIÓ O NO -->
+          <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
             ${p.datosPagoEnviados ? `
-              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-blue-500/30">
+              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}', '${keyRegistro}')" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-blue-500/30">
                 <span>✓ Datos de Pago Enviados (Reenviar)</span>
               </button>
             ` : `
-              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-600">
+              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}', '${keyRegistro}')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-600">
                 <span>💳 Enviar Datos de Transferencia</span>
               </button>
             `}
 
             ${esPendiente ? `
-              <button onclick="confirmarEInformaCliente('${p.id}', '${p.telefono}', '${p.cliente}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
+              <button onclick="confirmarEInformaCliente('${keyRegistro}', '${p.id}', '${p.telefono}', '${p.cliente}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
                 <span>👨‍🍳 Confirmar e Iniciar Cocina</span>
               </button>
             ` : ''}
 
             ${esPreparacion ? `
-              <button onclick="cambiarEstadoPedido('${p.id}', 'entregado')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
+              <button onclick="cambiarEstadoPedido('${keyRegistro}', 'entregado')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
                 <span>✅ Marcar como Finalizado / Entregado</span>
               </button>
             ` : ''}
@@ -179,20 +179,19 @@
       `;
     }
 
-    // Actualiza el estado en Firebase
-    function cambiarEstadoPedido(idPedido, nuevoEstado) {
-      db.ref('pedidos/' + idPedido.replace('#', '')).update({
+    // Actualiza el estado en Firebase usando la clave única
+    function cambiarEstadoPedido(keyRegistro, nuevoEstado) {
+      db.ref('pedidos/' + keyRegistro).update({
         estado: nuevoEstado
       });
     }
- function enviarDatosPagoWA(telefonoCliente, idPedido) {
-      // 1. Limpiar el formato del número telefónico
+
+    function enviarDatosPagoWA(telefonoCliente, idPedido, keyRegistro) {
       let numLimpio = telefonoCliente.replace(/\D/g, '');
       if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
         numLimpio = '56' + numLimpio;
       }
 
-      // 2. Redactar el mensaje con tus datos bancarios
       const mensaje = `¡Hola! 👋 Para confirmar tu pedido ${idPedido}, te enviamos los datos para realizar la transferencia:\n\n` +
                       `📌 *DATOS DE TRANSFERENCIA*\n` +
                       `• Banco: BancoEstado / Falabella / Chile\n` +
@@ -203,41 +202,34 @@
                       `• Correo: pagos@burgerkitchen.cl\n\n` +
                       `Por favor reenvíanos la foto o comprobante por este mismo chat. ¡Muchas gracias! 🍔`;
 
-      // 3. Marcar en Firebase que los datos de pago ya se enviaron
       try {
-        db.ref('pedidos/' + idPedido.replace('#', '')).update({
+        db.ref('pedidos/' + keyRegistro).update({
           datosPagoEnviados: true
         });
       } catch (e) {
         console.error("Error al actualizar estado de pago en Firebase:", e);
       }
 
-      // 4. Abrir la ventana de WhatsApp con el mensaje cargado
       const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
       window.open(urlWA, '_blank');
     }
-    
-function confirmarEInformaCliente(idPedido, telefonoCliente, nombreCliente) {
-  // 1. Actualizar el estado en Firebase
-  db.ref('pedidos/' + idPedido.replace('#', '')).update({
-    estado: 'preparacion'
-  });
 
-  // 2. Formatear y limpiar el número de teléfono
-  let numLimpio = telefonoCliente.replace(/\D/g, '');
-  
-  // Si no tiene código de país (ej. Chile 56), se lo antepone si empieza con 9
-  if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
-    numLimpio = '56' + numLimpio;
-  }
+    function confirmarEInformaCliente(keyRegistro, idPedido, telefonoCliente, nombreCliente) {
+      db.ref('pedidos/' + keyRegistro).update({
+        estado: 'preparacion'
+      });
 
-  // 3. Crear el mensaje personalizado
-  const mensaje = `¡Hola ${nombreCliente}! 👋\n\nTu pedido ${idPedido} ha sido *confirmado* por el equipo de cocina y ya se encuentra en preparación. 🔥🍔\n\nTe avisaremos apenas esté listo. ¡Muchas gracias!`;
+      let numLimpio = telefonoCliente.replace(/\D/g, '');
+      if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
+        numLimpio = '56' + numLimpio;
+      }
 
-  // 4. Abrir WhatsApp en una nueva pestaña
-  const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
-  window.open(urlWA, '_blank');
-}
+      const mensaje = `¡Hola ${nombreCliente}! 👋\n\nTu pedido ${idPedido} ha sido *confirmado* por el equipo de cocina y ya se encuentra en preparación. 🔥🍔\n\nTe avisaremos apenas esté listo. ¡Muchas gracias!`;
+
+      const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
+      window.open(urlWA, '_blank');
+    }
+
     function filtrarPedidos(filtro) {
       filtroActual = filtro;
       const btnTodos = document.getElementById('btn-filtro-todos');
