@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Burger Kitchen | Pantalla de Cocina (KDS)</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- SDKs de Firebase -->
+  <!-- SDKs de Firebase Realtime Database -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
@@ -47,6 +48,7 @@
   </main>
 
   <script>
+    // Configuración e Inicialización de Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCI3CWPBGqBsq30CC3AouVu3p4uhkNOkrw",
       authDomain: "comandas-114cc.firebaseapp.com",
@@ -63,8 +65,30 @@
 
     let pedidos = [];
     let filtroActual = 'todos';
+    let cantidadAnteriorPendientes = 0;
 
-    // ESCUCHAR CAMBIOS EN TIEMPO REAL DESDE FIREBASE
+    // Alarma Sonora utilizando Web Audio API (No requiere archivos externos)
+    function reproducirAlarmaCocina() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Tono A5
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch (e) {
+        console.warn("La reproducción de audio automática requiere interacción previa en pantalla.", e);
+      }
+    }
+
+    // Escuchar cambios en tiempo real desde Firebase
     db.ref('pedidos').on('value', (snapshot) => {
       const data = snapshot.val();
       pedidos = [];
@@ -72,14 +96,35 @@
         Object.keys(data).forEach(key => {
           pedidos.push({
             ...data[key],
-            firebaseKey: key // Guardamos la clave única para evitar duplicados
+            firebaseKey: key
           });
         });
-        // Ordenar del más reciente al más antiguo
-        pedidos.sort((a, b) => b.timestamp - a.timestamp);
+
+        // Ordenar comanda: de la más antigua a la más reciente para atender en orden de llegada
+        pedidos.sort((a, b) => a.timestamp - b.timestamp);
       }
+
+      const pendientesActuales = pedidos.filter(p => p.estado === 'pendiente').length;
+      if (pendientesActuales > cantidadAnteriorPendientes) {
+        reproducirAlarmaCocina();
+      }
+      cantidadAnteriorPendientes = pendientesActuales;
+
       cargarPedidosCocina();
     });
+
+    // Actualizar los cronómetros de tiempo transcurrido cada 30 segundos
+    setInterval(() => {
+      cargarPedidosCocina();
+    }, 30000);
+
+    function calcularTiempoTranscurrido(timestamp) {
+      if (!timestamp) return { texto: 'Hace instantes', minutos: 0 };
+      const difMs = Date.now() - timestamp;
+      const minutos = Math.floor(difMs / 60000);
+      if (minutos < 1) return { texto: 'Recién ingresado', minutos: 0 };
+      return { texto: `Hace ${minutos} min`, minutos };
+    }
 
     function cargarPedidosCocina() {
       const grid = document.getElementById('grid-comandas');
@@ -107,8 +152,16 @@
 
     function crearTarjetaComanda(p) {
       const esPendiente = p.estado === 'pendiente';
-      const esPreparacion = p.estado === 'preparacion';
       const keyRegistro = p.firebaseKey || p.id.replace('#', '');
+      const tiempo = calcularTiempoTranscurrido(p.timestamp);
+
+      // Estilo por tiempo de espera
+      let timeBadgeStyle = "bg-gray-700/50 text-gray-300";
+      if (tiempo.minutos >= 10 && tiempo.minutos < 20) {
+        timeBadgeStyle = "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold";
+      } else if (tiempo.minutos >= 20) {
+        timeBadgeStyle = "bg-red-500/30 text-red-300 border border-red-500/50 font-black animate-pulse";
+      }
 
       let borderStyle = esPendiente ? 'border-amber-500/50 bg-amber-950/10' : 'border-emerald-500/50 bg-emerald-950/10';
       let badgeEstado = esPendiente 
@@ -127,7 +180,8 @@
                 <span class="text-2xl font-black text-white tracking-wider">${p.id}</span>
                 <div class="flex items-center gap-2 mt-1">
                   ${badgeTipo}
-                  <span class="text-xs text-gray-400 font-mono">${p.hora}</span>
+                  <span class="text-xs text-gray-400 font-mono">${p.hora || ''}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full ${timeBadgeStyle}">⏱️ ${tiempo.texto}</span>
                 </div>
               </div>
               <div>${badgeEstado}</div>
@@ -142,10 +196,10 @@
             <div class="space-y-2 mb-6">
               <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Comanda:</p>
               <ul class="divide-y divide-gray-700/50 text-sm">
-                ${p.items.map(item => `
+                ${(p.items || []).map(item => `
                   <li class="py-1.5 flex justify-between items-center font-semibold">
-                    <span class="text-emerald-300 font-bold">${item.cant}x</span>
-                    <span class="text-white flex-grow ml-2">${item.nombre}</span>
+                    <span class="text-emerald-300 font-bold text-base">${item.cant}x</span>
+                    <span class="text-white flex-grow ml-2 font-bold">${item.nombre}</span>
                   </li>
                 `).join('')}
               </ul>
@@ -169,7 +223,7 @@
               </button>
             ` : ''}
 
-            ${esPreparacion ? `
+            ${p.estado === 'preparacion' ? `
               <button onclick="cambiarEstadoPedido('${keyRegistro}', 'entregado')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
                 <span>✅ Marcar como Finalizado / Entregado</span>
               </button>
@@ -179,7 +233,6 @@
       `;
     }
 
-    // Actualiza el estado en Firebase usando la clave única
     function cambiarEstadoPedido(keyRegistro, nuevoEstado) {
       db.ref('pedidos/' + keyRegistro).update({
         estado: nuevoEstado
