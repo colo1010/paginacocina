@@ -1,51 +1,48 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Burger Kitchen | Pantalla de Cocina (KDS)</title>
+  <title>Burger Kitchen | Panel de Cocina 👨‍🍳</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+
   <!-- SDKs de Firebase Realtime Database -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-4 sm:p-6">
+<body class="bg-gray-900 text-gray-100 min-h-screen p-4 sm:p-6">
 
-  <!-- ENCABEZADO DE COCINA -->
-  <header class="flex flex-col sm:flex-row justify-between items-center pb-6 border-b border-gray-800 gap-4">
+  <!-- Encabezado de Cocina -->
+  <header class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center pb-6 border-b border-gray-800 gap-4">
     <div>
-      <h1 class="text-2xl sm:text-3xl font-black text-emerald-400 flex items-center gap-2">
-        <span>👨‍🍳</span> BURGER KITCHEN — COCINA
+      <h1 class="text-3xl font-black text-emerald-400 tracking-wider flex items-center gap-2">
+        <span>🍔</span> BURGER KITCHEN - COCINA
       </h1>
-      <p class="text-gray-400 text-xs sm:text-sm mt-1">
-        Gestión de comandas en tiempo real vía Firebase.
-      </p>
+      <p class="text-xs text-gray-400 mt-1">Monitor de comandas y pedidos en tiempo real</p>
     </div>
-
-    <!-- Filtros de Estado -->
-    <div class="flex items-center gap-2 bg-gray-800 p-1.5 rounded-xl border border-gray-700 text-xs sm:text-sm">
-      <button onclick="filtrarPedidos('todos')" id="btn-filtro-todos" class="px-3 py-1.5 rounded-lg font-bold bg-emerald-600 text-white">
-        Todos (<span id="cant-todos">0</span>)
-      </button>
-      <button onclick="filtrarPedidos('pendiente')" id="btn-filtro-pendiente" class="px-3 py-1.5 rounded-lg font-bold text-gray-300 hover:bg-gray-700">
-        Pendientes (<span id="cant-pendiente">0</span>)
-      </button>
-      <button onclick="filtrarPedidos('preparacion')" id="btn-filtro-preparacion" class="px-3 py-1.5 rounded-lg font-bold text-gray-300 hover:bg-gray-700">
-        En Cocina (<span id="cant-preparacion">0</span>)
+    
+    <div class="flex items-center gap-4">
+      <div id="estado-conexion" class="flex items-center gap-2 bg-gray-800 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-400 border border-emerald-900">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Conectado a Firebase</span>
+      </div>
+      <button onclick="activarSonido()" id="btn-sonido" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs px-3 py-1.5 rounded-lg border border-gray-700 font-bold transition">
+        🔔 Activar Audio
       </button>
     </div>
   </header>
 
-  <main class="mt-6">
-    <div id="sin-pedidos" class="text-center py-20 hidden">
-      <div class="text-6xl mb-4">🍔</div>
-      <h2 class="text-xl font-bold text-gray-400">No hay comandas activas en este momento</h2>
-      <p class="text-gray-600 text-sm mt-1">Los nuevos pedidos realizados aparecerán aquí automáticamente.</p>
+  <!-- Contenedor Principal de Comandas -->
+  <main class="max-w-7xl mx-auto mt-6">
+    <div id="sin-pedidos" class="text-center py-20 text-gray-500">
+      <span class="text-6xl block mb-3">👨‍🍳</span>
+      <h2 class="text-xl font-bold text-gray-400">No hay comandas pendientes</h2>
+      <p class="text-xs text-gray-600 mt-1">Los nuevos pedidos realizados por los clientes aparecerán aquí automáticamente.</p>
     </div>
 
-    <div id="grid-comandas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    <!-- Grid de Comandas -->
+    <div id="contenedor-comandas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
   </main>
 
   <script>
@@ -64,245 +61,153 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let pedidos = [];
-    let filtroActual = 'todos';
-    let cantidadAnteriorPendientes = 0;
+    let sonidoPermitido = false;
+    let audioNotificacion = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
-    // Alarma Sonora utilizando Web Audio API
-    function reproducirAlarmaCocina() {
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } catch (e) {
-        console.warn("La reproducción de audio automática requiere interacción previa en pantalla.", e);
-      }
-    }
-
-    // Escuchar cambios en tiempo real desde Firebase
-    db.ref('pedidos').on('value', (snapshot) => {
-      const data = snapshot.val();
-      pedidos = [];
-      if (data) {
-        Object.keys(data).forEach(key => {
-          pedidos.push({
-            ...data[key],
-            firebaseKey: key
-          });
-        });
-
-        // Ordenar comanda: de la más antigua a la más reciente
-        pedidos.sort((a, b) => a.timestamp - b.timestamp);
-      }
-
-      const pendientesActuales = pedidos.filter(p => p.estado === 'pendiente').length;
-      if (pendientesActuales > cantidadAnteriorPendientes) {
-        reproducirAlarmaCocina();
-      }
-      cantidadAnteriorPendientes = pendientesActuales;
-
-      cargarPedidosCocina();
-    });
-
-    // Actualizar cronómetros cada 30 segundos
-    setInterval(() => {
-      cargarPedidosCocina();
-    }, 30000);
-
-    function calcularTiempoTranscurrido(timestamp) {
-      if (!timestamp) return { texto: 'Hace instantes', minutos: 0 };
-      const difMs = Date.now() - timestamp;
-      const minutos = Math.floor(difMs / 60000);
-      if (minutos < 1) return { texto: 'Recién ingresado', minutos: 0 };
-      return { texto: `Hace ${minutos} min`, minutos };
-    }
-
-    function cargarPedidosCocina() {
-      const grid = document.getElementById('grid-comandas');
-      const msjVacio = document.getElementById('sin-pedidos');
-
-      let pedidosFiltrados = pedidos.filter(p => p.estado !== 'entregado');
+    function activarSonido() {
+      sonidoPermitido = true;
+      audioNotificacion.play().then(() => {
+        audioNotificacion.pause();
+        audioNotificacion.currentTime = 0;
+      }).catch(() => {});
       
-      if (filtroActual !== 'todos') {
-        pedidosFiltrados = pedidosFiltrados.filter(p => p.estado === filtroActual);
-      }
+      const btn = document.getElementById('btn-sonido');
+      btn.innerText = "🔔 Audio Activado";
+      btn.className = "bg-emerald-900/50 text-emerald-300 text-xs px-3 py-1.5 rounded-lg border border-emerald-700 font-bold";
+    }
 
-      document.getElementById('cant-todos').innerText = pedidos.filter(p => p.estado !== 'entregado').length;
-      document.getElementById('cant-pendiente').innerText = pedidos.filter(p => p.estado === 'pendiente').length;
-      document.getElementById('cant-preparacion').innerText = pedidos.filter(p => p.estado === 'preparacion').length;
+    // Escuchar comandas en tiempo real desde Firebase
+    let conteoPrevio = -1;
 
-      if (pedidosFiltrados.length === 0) {
-        grid.innerHTML = '';
-        msjVacio.classList.remove('hidden');
+    db.ref('comandas').on('value', (snapshot) => {
+      const data = snapshot.val();
+      const contenedor = document.getElementById('contenedor-comandas');
+      const mensajeVacio = document.getElementById('sin-pedidos');
+
+      contenedor.innerHTML = '';
+
+      if (!data) {
+        mensajeVacio.classList.remove('hidden');
+        conteoPrevio = 0;
         return;
       }
 
-      msjVacio.classList.add('hidden');
-      grid.innerHTML = pedidosFiltrados.map(p => crearTarjetaComanda(p)).join('');
-    }
+      const keys = Object.keys(data);
+      let pedidosActivos = 0;
 
-    function crearTarjetaComanda(p) {
-      const esPendiente = p.estado === 'pendiente';
-      const keyRegistro = p.firebaseKey || p.id.replace('#', '');
-      const tiempo = calcularTiempoTranscurrido(p.timestamp);
+      // Reproducir sonido si entra un pedido nuevo
+      if (conteoPrevio !== -1 && keys.length > conteoPrevio && sonidoPermitido) {
+        audioNotificacion.play().catch(() => {});
+      }
+      conteoPrevio = keys.length;
 
-      let timeBadgeStyle = "bg-gray-700/50 text-gray-300";
-      if (tiempo.minutos >= 10 && tiempo.minutos < 20) {
-        timeBadgeStyle = "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold";
-      } else if (tiempo.minutos >= 20) {
-        timeBadgeStyle = "bg-red-500/30 text-red-300 border border-red-500/50 font-black animate-pulse";
+      // Renderizar cada pedido activo
+      keys.reverse().forEach(key => {
+        const pedido = data[key];
+        
+        // No mostrar pedidos finalizados/entregados
+        if (pedido.estado !== 'entregado') {
+          pedidosActivos++;
+          contenedor.appendChild(crearTarjetaComanda(key, pedido));
+        }
+      });
+
+      if (pedidosActivos === 0) {
+        mensajeVacio.classList.remove('hidden');
+      } else {
+        mensajeVacio.classList.add('hidden');
+      }
+    });
+
+    function crearTarjetaComanda(key, p) {
+      const card = document.createElement('div');
+      
+      // Color según el estado
+      let borderStyle = "border-emerald-500/40 bg-gray-800";
+      let badgeEstado = `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase">⏳ Pendiente</span>`;
+      
+      if (p.estado === 'en_preparacion') {
+        borderStyle = "border-blue-500/50 bg-gray-800/90";
+        badgeEstado = `<span class="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase animate-pulse">🔥 En Cocina</span>`;
+      } else if (p.estado === 'listo') {
+        borderStyle = "border-emerald-500 bg-gray-800";
+        badgeEstado = `<span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase">✅ Listo para Entrega</span>`;
       }
 
-      let borderStyle = esPendiente ? 'border-amber-500/50 bg-amber-950/10' : 'border-emerald-500/50 bg-emerald-950/10';
-      let badgeEstado = esPendiente 
-        ? `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2.5 py-1 rounded-full font-bold">⚠️ Pendiente Confirmar</span>`
-        : `<span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs px-2.5 py-1 rounded-full font-bold animate-pulse">🔥 En Preparación</span>`;
+      let itemsHtml = p.items ? p.items.map(item => `
+        <li class="flex justify-between items-center text-sm py-1 border-b border-gray-700/50">
+          <span class="font-extrabold text-white text-base">${item.cantidad}x <span class="text-gray-200 font-bold">${item.nombre}</span></span>
+        </li>
+      `).join('') : '<li class="text-xs text-gray-500">Sin detalles de productos</li>';
 
-      let badgeTipo = p.tipo === 'delivery'
-        ? `<span class="bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs px-2 py-0.5 rounded font-bold">🛵 Delivery</span>`
-        : `<span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs px-2 py-0.5 rounded font-bold">🛍️ Retiro</span>`;
-
-      return `
-        <div class="bg-gray-800 rounded-2xl border ${borderStyle} p-5 shadow-xl flex flex-col justify-between relative overflow-hidden">
-          <div>
-            <!-- ENCABEZADO COMANDA -->
-            <div class="flex justify-between items-start border-b border-gray-700 pb-3 mb-3">
-              <div>
-                <span class="text-2xl font-black text-white tracking-wider">${p.id}</span>
-                <div class="flex items-center gap-2 mt-1">
-                  ${badgeTipo}
-                  <span class="text-xs text-gray-400 font-mono">${p.hora || ''}</span>
-                  <span class="text-xs px-2 py-0.5 rounded-full ${timeBadgeStyle}">⏱️ ${tiempo.texto}</span>
-                </div>
-              </div>
-              <div>${badgeEstado}</div>
+      card.className = `rounded-xl p-5 border-2 shadow-xl flex flex-col justify-between transition ${borderStyle}`;
+      card.innerHTML = `
+        <div>
+          <!-- Cabecera de la Comanda -->
+          <div class="flex justify-between items-start mb-3 border-b border-gray-700 pb-3">
+            <div>
+              <span class="text-xl font-black text-white">${p.numPedido || '#BK-000'}</span>
+              <span class="text-xs text-gray-400 block mt-0.5">${p.fecha || ''}</span>
             </div>
-
-            <!-- DATOS DE CONTACTO (NOMBRE MÁS PEQUEÑO) -->
-            <div class="text-[11px] leading-tight text-gray-400 mb-4 bg-gray-900/60 p-2 rounded-lg border border-gray-700/50 space-y-0.5">
-              <p><strong class="text-gray-300">Cliente:</strong> <span class="font-medium text-gray-200">${p.cliente}</span> (${p.telefono})</p>
-              ${p.direccion ? `<p><strong class="text-gray-300">Dirección:</strong> <span class="text-amber-200/90">${p.direccion}</span></p>` : ''}
-            </div>
-
-            <!-- DETALLE DE PEDIDO (PRODUCTOS MÁS GRANDES Y DESTACADOS) -->
-            <div class="space-y-2 mb-6">
-              <p class="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest border-b border-emerald-900/40 pb-1">PEDIDO:</p>
-              <ul class="divide-y divide-gray-700/50">
-                ${(p.items || []).map(item => `
-                  <li class="py-2 flex items-center justify-between">
-                    <span class="text-emerald-400 font-black text-xl sm:text-2xl pr-3">${item.cant}x</span>
-                    <span class="text-white font-black text-lg sm:text-xl flex-grow leading-snug">${item.nombre}</span>
-                  </li>
-                `).join('')}
-              </ul>
-            </div>
+            ${badgeEstado}
           </div>
 
-          <!-- BOTONES DE ACCIÓN -->
-          <div class="pt-3 border-t border-gray-700 flex flex-col gap-2">
-            ${p.datosPagoEnviados ? `
-              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}', '${keyRegistro}')" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-blue-500/30">
-                <span>✓ Datos de Pago Enviados (Reenviar)</span>
-              </button>
-            ` : `
-              <button onclick="enviarDatosPagoWA('${p.telefono}', '${p.id}', '${keyRegistro}')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-2 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-600">
-                <span>💳 Enviar Datos de Transferencia</span>
-              </button>
-            `}
+          <!-- Datos del Cliente -->
+          <div class="text-xs text-gray-300 mb-4 bg-gray-900/60 p-2.5 rounded-lg border border-gray-700/50 space-y-1">
+            <p><strong>Cliente:</strong> ${p.cliente}</p>
+            <p><strong>Tipo:</strong> <span class="uppercase font-bold text-emerald-400">${p.tipoEntrega === 'delivery' ? '🛵 Delivery' : '🛍️ Retiro en Local'}</span></p>
+            ${p.tipoEntrega === 'delivery' ? `<p><strong>Dirección:</strong> ${p.direccion}</p>` : ''}
+            <p><strong>Teléfono:</strong> ${p.telefono}</p>
+          </div>
 
-            ${esPendiente ? `
-              <button onclick="confirmarEInformaCliente('${keyRegistro}', '${p.id}', '${p.telefono}', '${p.cliente}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
-                <span>👨‍🍳 Confirmar e Iniciar Cocina</span>
+          <!-- Detalle de Productos -->
+          <div class="mb-4">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-gray-400 mb-2">📋 Detalle del Pedido:</h4>
+            <ul class="space-y-1">
+              ${itemsHtml}
+            </ul>
+          </div>
+        </div>
+
+        <!-- Total y Acciones de Estado -->
+        <div class="pt-3 border-t border-gray-700">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-xs text-gray-400 font-bold">TOTAL:</span>
+            <span class="text-lg font-black text-emerald-400">$${(p.total || 0).toLocaleString('es-CL')} CLP</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            ${p.estado === 'pendiente' ? `
+              <button onclick="cambiarEstado('${key}', 'en_preparacion')" class="col-span-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold py-2.5 rounded-lg transition">
+                🔥 Iniciar Preparación
               </button>
             ` : ''}
 
-            ${p.estado === 'preparacion' ? `
-              <button onclick="cambiarEstadoPedido('${keyRegistro}', 'entregado')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-lg">
-                <span>✅ Marcar como Finalizado / Entregado</span>
+            ${p.estado === 'en_preparacion' ? `
+              <button onclick="cambiarEstado('${key}', 'listo')" class="col-span-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold py-2.5 rounded-lg transition">
+                ✅ Marcar como Listo
+              </button>
+            ` : ''}
+
+            ${p.estado === 'listo' ? `
+              <button onclick="cambiarEstado('${key}', 'entregado')" class="col-span-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-extrabold py-2.5 rounded-lg transition">
+                📦 Despachar / Archivar
               </button>
             ` : ''}
           </div>
         </div>
       `;
+
+      return card;
     }
 
-    function cambiarEstadoPedido(keyRegistro, nuevoEstado) {
-      db.ref('pedidos/' + keyRegistro).update({
+    function cambiarEstado(key, nuevoEstado) {
+      db.ref(`comandas/${key}`).update({
         estado: nuevoEstado
+      }).catch(err => {
+        alert("Error al actualizar estado en Firebase");
       });
-    }
-
-    function enviarDatosPagoWA(telefonoCliente, idPedido, keyRegistro) {
-      let numLimpio = telefonoCliente.replace(/\D/g, '');
-      if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
-        numLimpio = '56' + numLimpio;
-      }
-
-      const mensaje = `¡Hola! 👋 Para confirmar tu pedido ${idPedido}, te enviamos los datos para realizar la transferencia:\n\n` +
-                      `📌 *DATOS DE TRANSFERENCIA*\n` +
-                      `• Banco: BancoEstado / Falabella / Chile\n` +
-                      `• Tipo de Cuenta: CuentaRUT / Corriente\n` +
-                      `• Número de Cuenta: 12345678\n` +
-                      `• RUT: 12.345.678-9\n` +
-                      `• Titular: Burger Kitchen SpA\n` +
-                      `• Correo: pagos@burgerkitchen.cl\n\n` +
-                      `Por favor reenvíanos la foto o comprobante por este mismo chat. ¡Muchas gracias! 🍔`;
-
-      try {
-        db.ref('pedidos/' + keyRegistro).update({
-          datosPagoEnviados: true
-        });
-      } catch (e) {
-        console.error("Error al actualizar estado de pago en Firebase:", e);
-      }
-
-      const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
-      window.open(urlWA, '_blank');
-    }
-
-    function confirmarEInformaCliente(keyRegistro, idPedido, telefonoCliente, nombreCliente) {
-      db.ref('pedidos/' + keyRegistro).update({
-        estado: 'preparacion'
-      });
-
-      let numLimpio = telefonoCliente.replace(/\D/g, '');
-      if (numLimpio.length === 9 && numLimpio.startsWith('9')) {
-        numLimpio = '56' + numLimpio;
-      }
-
-      const mensaje = `¡Hola ${nombreCliente}! 👋\n\nTu pedido ${idPedido} ha sido *confirmado* por el equipo de cocina y ya se encuentra en preparación. 🔥🍔\n\nTe avisaremos apenas esté listo. ¡Muchas gracias!`;
-
-      const urlWA = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
-      window.open(urlWA, '_blank');
-    }
-
-    function filtrarPedidos(filtro) {
-      filtroActual = filtro;
-      const btnTodos = document.getElementById('btn-filtro-todos');
-      const btnPend = document.getElementById('btn-filtro-pendiente');
-      const btnPrep = document.getElementById('btn-filtro-preparacion');
-
-      const activoClass = "px-3 py-1.5 rounded-lg font-bold bg-emerald-600 text-white";
-      const inactivoClass = "px-3 py-1.5 rounded-lg font-bold text-gray-300 hover:bg-gray-700";
-
-      btnTodos.className = filtro === 'todos' ? activoClass : inactivoClass;
-      btnPend.className = filtro === 'pendiente' ? activoClass : inactivoClass;
-      btnPrep.className = filtro === 'preparacion' ? activoClass : inactivoClass;
-
-      cargarPedidosCocina();
     }
   </script>
 </body>
 </html>
-
-```
