@@ -19,7 +19,7 @@
       <h1 class="text-3xl font-black text-emerald-400 tracking-wider flex items-center gap-2">
         <span>🍔</span> BURGER KITCHEN - COCINA
       </h1>
-      <p class="text-xs text-gray-400 mt-1">Monitor de comandas y pedidos en tiempo real</p>
+      <p class="text-xs text-gray-400 mt-1">Monitor de comandas con temporizador en tiempo real</p>
     </div>
     
     <div class="flex items-center gap-4">
@@ -46,7 +46,7 @@
   </main>
 
   <script>
-    // Configuración e Inicialización de Firebase
+    // Configuración e Inicialización de Firebase Realtime Database
     const firebaseConfig = {
       apiKey: "AIzaSyCI3CWPBGqBsq30CC3AouVu3p4uhkNOkrw",
       authDomain: "comandas-114cc.firebaseapp.com",
@@ -63,6 +63,7 @@
 
     let sonidoPermitido = false;
     let audioNotificacion = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    let comandasCache = {}; // Guardar pedidos activos para actualizar cronómetros dinámicamente
 
     function activarSonido() {
       sonidoPermitido = true;
@@ -85,6 +86,7 @@
       const mensajeVacio = document.getElementById('sin-pedidos');
 
       contenedor.innerHTML = '';
+      comandasCache = {};
 
       if (!data) {
         mensajeVacio.classList.remove('hidden');
@@ -105,9 +107,9 @@
       keys.reverse().forEach(key => {
         const pedido = data[key];
         
-        // No mostrar pedidos finalizados/entregados
         if (pedido.estado !== 'entregado') {
           pedidosActivos++;
+          comandasCache[key] = pedido;
           contenedor.appendChild(crearTarjetaComanda(key, pedido));
         }
       });
@@ -117,12 +119,14 @@
       } else {
         mensajeVacio.classList.add('hidden');
       }
+
+      actualizarTemporizadores();
     });
 
     function crearTarjetaComanda(key, p) {
       const card = document.createElement('div');
+      card.id = `card-${key}`;
       
-      // Color según el estado
       let borderStyle = "border-emerald-500/40 bg-gray-800";
       let badgeEstado = `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase">⏳ Pendiente</span>`;
       
@@ -143,13 +147,19 @@
       card.className = `rounded-xl p-5 border-2 shadow-xl flex flex-col justify-between transition ${borderStyle}`;
       card.innerHTML = `
         <div>
-          <!-- Cabecera de la Comanda -->
+          <!-- Cabecera de la Comanda + Cronómetro -->
           <div class="flex justify-between items-start mb-3 border-b border-gray-700 pb-3">
             <div>
               <span class="text-xl font-black text-white">${p.numPedido || '#BK-000'}</span>
               <span class="text-xs text-gray-400 block mt-0.5">${p.fecha || ''}</span>
             </div>
-            ${badgeEstado}
+            <div class="flex flex-col items-end gap-1">
+              ${badgeEstado}
+              <!-- Badge de Tiempo Transcurrido -->
+              <span id="timer-${key}" class="px-2.5 py-0.5 rounded-md text-xs font-mono font-black border transition-all">
+                ⏱️ 00:00
+              </span>
+            </div>
           </div>
 
           <!-- Datos del Cliente -->
@@ -200,6 +210,45 @@
 
       return card;
     }
+
+    // Función para calcular y actualizar el tiempo y color cada segundo
+    function actualizarTemporizadores() {
+      const ahora = Date.now();
+
+      Object.keys(comandasCache).forEach(key => {
+        const p = comandasCache[key];
+        const timerElem = document.getElementById(`timer-${key}`);
+        if (!timerElem) return;
+
+        // Calcular el tiempo transcurrido basándose en el timestamp guardado en Firebase
+        const inicio = p.timestamp || ahora;
+        const diferenciaMs = ahora - inicio;
+        
+        const totalSegundos = Math.floor(diferenciaMs / 1000);
+        const minutos = Math.floor(totalSegundos / 60);
+        const segundos = totalSegundos % 60;
+
+        const minFmt = String(minutos).padStart(2, '0');
+        const segFmt = String(segundos).padStart(2, '0');
+
+        timerElem.innerText = `⏱️ ${minFmt}:${segFmt}`;
+
+        // Lógica de colores según el tiempo acumulado
+        if (minutos < 10) {
+          // Verde: De 0 a 10 minutos
+          timerElem.className = "px-2.5 py-0.5 rounded-md text-xs font-mono font-black border bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+        } else if (minutos < 20) {
+          // Amarillo / Naranja: De 10 a 20 minutos
+          timerElem.className = "px-2.5 py-0.5 rounded-md text-xs font-mono font-black border bg-amber-500/20 text-amber-300 border-amber-500/40";
+        } else {
+          // Rojo intermitente: Más de 20 minutos
+          timerElem.className = "px-2.5 py-0.5 rounded-md text-xs font-mono font-black border bg-red-500/30 text-red-300 border-red-500/60 animate-pulse";
+        }
+      });
+    }
+
+    // Ejecutar la actualización del reloj cada 1 segundo
+    setInterval(actualizarTemporizadores, 1000);
 
     function cambiarEstado(key, nuevoEstado) {
       db.ref(`comandas/${key}`).update({
